@@ -1,0 +1,13 @@
+[Unit]
+Description=Bridge FDB Daemon
+Requires=hostapd.service
+After=hostapd.service
+
+[Service]
+EnvironmentFile=-/etc/default/bridgefdbd
+WorkingDirectory=/usr/local/sbin/
+Type=simple
+ExecStart=/usr/local/sbin/bridgefdbd $BRIDGEFDBD_OPTS $BRIDGEFDBD_ADDRS
+
+[Install]
+WantedBy=multi-user.target
