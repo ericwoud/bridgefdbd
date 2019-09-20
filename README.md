@@ -10,15 +10,19 @@ Now connect your phone to the wifi on your AP (make it forget about the router w
 
 What happened is after a certain amount of minutes the FDB entries are cleaned up if they have not been used and everything works again until you switch from AP to router or from router to AP.
 
-If you want to change from router to AP more smoothly you will need this daemon. It deletes the MAC address from the FDB on all bridges whenever a wifi client connects/disconnects to hostapd for a wifi connection. 
+If you want to change from router to AP more smoothly you will need to apply some fix. I have 2 solutions for this problem. 
 
-## Getting Started
+1. [FDB Deamon](https://github.com/ericwoud/bridgefdbd) It deletes the MAC address from the FDB on all bridges whenever a wifi client connects/disconnects to hostapd for a wifi connection. You need to be able to install the bridgefdbd program on your AP AND also on your wireless router. Your wifi client gets the same MAC and IP number on router and AP.
+
+2. [Mc Spoof](https://github.com/ericwoud/mcspoof) It applies a technique called MAC spoofing. Your wifi client gets a different MAC and IP number on the wireless router then on the AP. It adds a fixed number to the mac address of the wifi client. You only need to install it on all AP's and wireless router, except one, usually your wireless router. If you cannot install custom software on your wireless router, this is the way to go. It is however more of a hack and is likely to break more easily.
+
+## Getting Started with Bridge FDB Daemon
 
 You need to build the program from source.
 
 ### Prerequisites
 
-You need to be able to install the bridgefdbd program on your AP AND also on your wireless router. Connect the router and AP directly without using a network switch. Hostapd needs to be in control of your wifi interfaces on your router and AP.
+You need to be able to install the bridgefdbd program on your AP AND also on your wireless router. Connect the router and AP directly without using a network switch. Hostapd needs to be in control of your wifi interfaces on your router and AP. On the AP the wifi interface needs to be added to the lan bridge.
 
 ### Installing
 
