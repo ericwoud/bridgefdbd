@@ -1,4 +1,4 @@
-# Bridge FDB Daemon
+# Managed WIFI - Bridge FDB Daemon
 
 A daemon to use when directly bridging your wifi interface to your network.
 
