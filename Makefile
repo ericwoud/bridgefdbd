@@ -1,5 +1,6 @@
 CC      = gcc
 RM      = rm -f
+CP      = cp -f
 CFLAGS := -pthread -g
 LDFLAGS := -pthread
 LIBRELEASE = v4.8.0
@@ -13,18 +14,18 @@ bridgefdbd: bridgefdbd.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -o bridgefdbd bridgefdbd.c libnetlink.c
 
 getlib:
-	rm -f libnetlink.*
-	@wget -nv https://raw.githubusercontent.com/shemminger/iproute2/$(LIBRELEASE)/include/libnetlink.h
-	@wget -nv https://raw.githubusercontent.com/shemminger/iproute2/$(LIBRELEASE)/lib/libnetlink.c
+	$(RM) libnetlink.*
+	@wget -nv --no-check-certificate https://raw.githubusercontent.com/shemminger/iproute2/$(LIBRELEASE)/include/libnetlink.h
+	@wget -nv --no-check-certificate https://raw.githubusercontent.com/shemminger/iproute2/$(LIBRELEASE)/lib/libnetlink.c
 	$(RM) bridgefdbd
 
 install:
 	(systemctl stop    bridgefdbd ; exit 0)
 	(systemctl disable bridgefdbd ; exit 0)
-	cp -f ./bridgefdbd         /usr/local/sbin/
-	(cp -f ./bridgefdbd.sh      /usr/local/sbin/ ; exit 0)
-	cp -f ./bridgefdbd.service /etc/systemd/system/
-	cp -f ./bridgefdbd_default /etc/default/bridgefdbd
+	($(CP) ./bridgefdbd         /usr/local/sbin/ ; exit 0)
+	($(CP) ./bridgefdbd.sh      /usr/local/sbin/ ; exit 0)
+	($(CP) ./bridgefdbd.service /etc/systemd/system/ ; exit 0)
+	($(CP) ./bridgefdbd_default /etc/default/bridgefdbd ; exit 0)
 	systemctl enable  bridgefdbd
 	systemctl start   bridgefdbd
 	systemctl status  bridgefdbd --no-pager
@@ -32,15 +33,15 @@ install:
 remove:
 	(systemctl stop    bridgefdbd ; exit 0)
 	(systemctl disable bridgefdbd ; exit 0)
-	rm -f /usr/local/sbin/bridgefdbd
-	rm -f /etc/systemd/system/bridgefdbd.service
-	rm -f /usr/local/sbin/bridgefdbd
-	rm -f /etc/default/bridgefdbd
+	$(RM) /usr/local/sbin/bridgefdbd.sh
+	$(RM) /etc/systemd/system/bridgefdbd.service
+	$(RM) /usr/local/sbin/bridgefdbd
+	$(RM) /etc/default/bridgefdbd
 
 clean:
 	$(RM) bridgefdbd
 
 veryclean:
 	$(RM) bridgefdbd
-	rm -f libnetlink.*
+	$(RM) libnetlink.*
 

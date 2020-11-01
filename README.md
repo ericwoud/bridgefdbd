@@ -1,6 +1,6 @@
 # Managed WIFI - Bridge FDB Daemon
 
-A daemon to use when directly bridging your wifi interface to your network.
+A daemon to use when directly bridging your wifi interface to your network, without NAT or masquerade.
 
 Ever tried to make an Acces Point (AP) by directly adding your wifi interface to the bridge on your AP? Why doesn't his work as expected? Why do you need to IPforward or use a NAT or somethin similar? When you add the wifi interface to the AP bridge the following happens:
 
@@ -12,9 +12,9 @@ What happened is after a certain amount of minutes the FDB entries are cleaned u
 
 If you want to change from router to AP more smoothly you will need to apply some fix. I have 2 solutions for this problem. 
 
-1. [FDB Deamon](https://github.com/ericwoud/bridgefdbd) It deletes the MAC address from the FDB on all bridges whenever a wifi client connects/disconnects to hostapd for a wifi connection. You need to be able to install the bridgefdbd program on your AP AND also on your wireless router. Your wifi client gets the same MAC and IP number on router and AP.
+1. [FDB Deamon](https://github.com/ericwoud/bridgefdbd) It deletes the MAC address from the FDB on all bridges whenever a wifi client connects/disconnects to hostapd for a wifi connection. You need to be able to install the bridgefdbd program on your AP AND also on your wireless router. Your wifi client gets the same MAC and IP number on router and AP. There can also be no ethernet switch between the router an AP's, because the switch's FDB does not get cleaned up.
 
-2. [Mc Spoof](https://github.com/ericwoud/mcspoof) It applies a technique called MAC spoofing. Your wifi client gets a different MAC and IP number on the wireless router then on the AP. It adds a fixed number to the mac address of the wifi client. You only need to install it on all AP's and wireless router, except one, usually your wireless router. If you cannot install custom software on your wireless router, this is the way to go. It is however more of a hack and is likely to break more easily.
+2. [Mc Spoof](https://github.com/ericwoud/mcspoof) It applies a technique called MAC spoofing. Your wifi client gets a different MAC and IP number on the wireless router then on the AP. It adds a fixed number to the mac address of the wifi client. You only need to install it on all AP's and wireless router, except one, usually your wireless router. If you cannot install custom software on your wireless router, this is the way to go. It is however more of a hack and is likely to break more easily. However, it is possible to have an ethernet switch between the router and AP's.
 
 ## Getting Started with Bridge FDB Daemon
 
@@ -54,7 +54,7 @@ make
 On Debian/Ubuntu you can use the following to copy the files to the needed locations and start and enable the systemd service. You may need to use sudo if not logged on as root.
 
 ```
-make install
+sudo make install
 ```
 
 Edit the /etc/default/bridgefdbd file. At least make sure that the IP addresses of the bridges on your router and on your AP are in the BRIDGEFDBD_ADDRS line. Restart the service if nessecairy.
@@ -62,14 +62,14 @@ Edit the /etc/default/bridgefdbd file. At least make sure that the IP addresses 
 
 Other make options:
 
-Do a make getlib, make and make install:
+Do a make getlib, make and make install (using sudo):
 ```
 make all
 ```
 
 Remove the installation:
 ```
-make remove
+sudo make remove
 ```
 
 Clean:
