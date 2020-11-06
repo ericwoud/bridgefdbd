@@ -87,7 +87,7 @@ make veryclean
 The command line options are:
 
 * -d number      : debug information 0 = none, 1 = some (default), 2 = all.
-* -p number      : port number to use for internal network communication (UDP).
+* -p number      : port number to use for internal network communication (UDP) (default = 11111).
 * -s script      : location of optional bash script that listens if some client connected on any bridge on your network (default = ./bridgefdbd.sh). If not used at all it can be removed.
 * -h path        ; hostapd ctrl_interface to use (default = /var/run/hostapd).
 

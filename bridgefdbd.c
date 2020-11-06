@@ -31,6 +31,7 @@
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <linux/if.h>
 #include <linux/if_ether.h>
 #include <arpa/inet.h>
 
@@ -38,7 +39,6 @@
 
 #define BUFFERSIZE      1024
 #define STRINGSIZE       256
-#define SMALLSTRINGSIZE   16
 #define ARRAYSIZE         16
 #define TIMEOUT            1
 #define LEVEL_EXIT    -32000
@@ -46,15 +46,14 @@
 struct rtnl_handle rth = { .fd = -1 };
 static int       stderr_fd = -1;
 static fpos_t    stderr_pos;
-char             bridge_string[SMALLSTRINGSIZE];
+char             bridge_string[IFNAMSIZ];
 int              bridge_ifindex;
 in_addr_t        bridge_addr = INADDR_NONE;
 char **          ip_strings;
 int              ip_strings_cnt;
 in_addr_t        ip_addrs[ARRAYSIZE];
 int              port = 11111;
-char             threadnames[ARRAYSIZE][SMALLSTRINGSIZE];
-#define          bridge_ipstring threadnames[0]
+char             bridge_ipstring[IFNAMSIZ];
 bool             threads_should_exit = false;
 bool             thread0_listening = false;
 int              debuglevel = 1;
@@ -62,7 +61,16 @@ char             *varrunhostapd = "/var/run/hostapd";
 char             *script ="./bridgefdbd.sh";
 FILE             *stdinprocess = NULL;
 pthread_mutex_t  libnetlink_mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_t        tid[ARRAYSIZE] = { [ 0 ... ARRAYSIZE-1] = (pthread_t)NULL };
+pthread_mutex_t  threadlist_mutex;
+char             tname[IFNAMSIZ];
+
+typedef struct node {
+    int val;
+    pthread_t thread;
+    char name[IFNAMSIZ];
+    struct node * next;
+} node_t;
+node_t * threadlist;
 
 struct fdb_entry {
   __s32 ifindex;
@@ -92,7 +100,6 @@ int debugprintf(int level, const char *fmt, ...)
   else exit(EXIT_FAILURE);
 }
 
-
 void nullStderr()
 {
   if  (stderr_fd == -1) {
@@ -113,6 +120,125 @@ void revertStderr()
     fsetpos(stderr, &stderr_pos);
     stderr_fd = -1;
   }
+}
+
+void node_print_list(node_t * head) {
+    node_t * current = head;
+    while (current != NULL) {
+        debugprintf(1, "printlist: %d %s\n", current->val, current->name); 
+        current = current->next;
+    }
+    debugprintf(1, "\n"); 
+}
+
+void node_push_last(node_t * head, int val, pthread_t thread, char *name) {
+    node_t * current = head;
+    while (current->next != NULL) current = current->next;
+    current->next = (node_t *) malloc(sizeof(node_t));
+    current->next->val = val;
+    current->next->thread = thread;
+    strncpy(current->next->name, name, IFNAMSIZ);                
+    current->next->next = NULL;
+}
+
+void node_push_first(node_t ** head, int val, pthread_t thread, char *name) {
+    node_t * new_node;
+    new_node = (node_t *) malloc(sizeof(node_t));
+    new_node->val = val;
+    new_node->thread = thread;
+    strncpy(new_node->name, name, IFNAMSIZ);                
+    new_node->next = *head;
+    *head = new_node;
+}
+
+int node_remove_first(node_t ** head) {
+    int retval = -1;
+    node_t * next_node = NULL;
+    if (*head == NULL) return -1;
+    next_node = (*head)->next;
+    retval = (*head)->val;
+    free(*head);
+    *head = next_node;
+    return retval;
+}
+
+int node_remove_last(node_t * head) {
+    int retval = 0;
+    if (head->next == NULL) {
+        retval = head->val;
+        free(head);
+        return retval;
+    }
+    node_t * current = head;
+    while (current->next->next != NULL) current = current->next;
+    retval = current->next->val;
+    free(current->next);
+    current->next = NULL;
+    return retval;
+
+}
+
+int node_remove_by_index(node_t ** head, int n) {
+    int i = 0, retval = -1;
+    node_t * current = *head, * temp_node = NULL;
+    if (n == 0) return node_remove_first(head);
+    for (i = 0; i < n-1; i++) {
+        if (current->next == NULL) return -1;
+        current = current->next;
+    }
+    temp_node = current->next;
+    retval = temp_node->val;
+    current->next = temp_node->next;
+    free(temp_node);
+    return retval;
+}
+
+
+int node_remove_by_value(node_t ** head, int val) {
+    node_t *previous, *current;
+    if (*head == NULL) return -1;
+    if ((*head)->val == val) return node_remove_first(head);
+    previous = *head;
+    current = (*head)->next;
+    while (current) {
+        if (current->val == val) {
+            previous->next = current->next;
+            free(current);
+            return val;
+        }
+        previous = current;
+        current  = current->next;
+    }
+    return -1;
+}
+
+int node_remove_by_name(node_t ** head, char *name) {
+    int retval = -1;
+    node_t *previous, *current;
+    if (*head == NULL) return -1;
+    if (strcmp((*head)->name, name) ==0) return node_remove_first(head); 
+    previous = *head;
+    current = (*head)->next;
+    while (current) {
+        if (strcmp(current->name, name) ==0) {
+            previous->next = current->next;
+            retval = current->val;
+            free(current);
+            return retval;
+        }
+        previous = current;
+        current  = current->next;
+    }
+    return -1;
+}
+
+void node_delete_list(node_t *head) {
+    node_t  *current = head, *next = head;
+    while (current) {
+        next = current->next;
+        free(current);
+        current = next;
+    }
 }
 
 int fdb_dump(const struct sockaddr_nl *who, struct nlmsghdr *n, void *arg)
@@ -225,12 +351,16 @@ int recvtimeout(int s, char *buf, int len, int flags)
 void* bridgefdb_threads(void *arg)
 {
     int sockfd, tnr;
-    char buffer[BUFFERSIZE];
-    pthread_t id = pthread_self();
+    char buffer[BUFFERSIZE], devname[IFNAMSIZ];
 
-    for (tnr=0; tnr < ARRAYSIZE; tnr++) if(pthread_equal(id,tid[tnr])) break;
+    pthread_getname_np(pthread_self(), devname, 16);
+    while (strcmp(devname, tname) ==0) { // name has not been set yet
+      nanosleep((const struct timespec[]){{0, 5000000L}}, NULL); // 0.005 seconds
+      pthread_getname_np(pthread_self(), devname, 16);
+    }  ;
+    pthread_detach(pthread_self());
 
-    if(tnr == 0) { // First Thread
+    if (strcmp(devname, bridge_string) ==0) { // First Thread
       int one = 1;
       socklen_t addr_size;
       struct sockaddr_in si_me, si_other;
@@ -269,11 +399,11 @@ void* bridgefdb_threads(void *arg)
           unlink(local.sun_path); // Just in case we did not unlink it when exiting
           if (bind(hapdsockfd, (struct sockaddr *) &local, sizeof(local)) !=-1) {
             dest.sun_family = AF_UNIX;
-            snprintf(dest.sun_path, sizeof(dest.sun_path),  "%s/%s", varrunhostapd, threadnames[tnr]);
+            snprintf(dest.sun_path, sizeof(dest.sun_path),  "%s/%s", varrunhostapd, devname);
 	    if (connect(hapdsockfd, (struct sockaddr *) &dest, sizeof(dest)) >= 0) {
               if (send(hapdsockfd, "DETACH", 6, 0) >= 0) { // // Just in case we did not send DETACH when exiting
                 if (send(hapdsockfd, "ATTACH", 6, 0) >= 0) {
-                  debugprintf(1, "Listening on %s\n", threadnames[tnr]);
+                  debugprintf(1, "Listening on %s\n", devname);
                   while ( threads_should_exit == false ) {
                     if ((recsize=recvtimeout(hapdsockfd, buffer, BUFFERSIZE, 0)) > 0) {
                       if (recsize >= BUFFERSIZE) recsize = BUFFERSIZE -1; 
@@ -294,7 +424,7 @@ void* bridgefdb_threads(void *arg)
                         }
                         fdb_delmac(buffer);
                         send2script(bridge_ipstring, buffer);
-                        debugprintf(2, "Recieved from hostapd-%s: %s\n", threadnames[tnr], buffer);
+                        debugprintf(2, "Recieved from hostapd-%s: %s\n", devname, buffer);
                       } 
                     }
                   }
@@ -307,6 +437,9 @@ void* bridgefdb_threads(void *arg)
         }
       }
     }
+    pthread_mutex_lock(&threadlist_mutex);
+    node_remove_by_name(&threadlist, devname);
+    pthread_mutex_unlock(&threadlist_mutex);
     pthread_exit(NULL);
     return NULL;
 }
@@ -331,6 +464,9 @@ int main(int argc, char *argv[])
     DIR *d;
     char path[PATH_MAX];
     pid_t pid = 0;
+    pthread_t thread;
+
+    if (pthread_getname_np(pthread_self(), tname, 16) != 0) debugprintf(LEVEL_EXIT, "Thread name error");
 
     argv++; argc--; 
     if (argc > 0) {
@@ -388,7 +524,7 @@ int main(int argc, char *argv[])
             for (i = 0 ; i<ip_strings_cnt; i++) { 
               if (ip_addrs[i] == ((struct sockaddr_in *) ifa->ifa_addr)->sin_addr.s_addr) {
                 bridge_addr = ip_addrs[i];
-                strncpy(bridge_string, ifa->ifa_name, SMALLSTRINGSIZE);                
+                strncpy(bridge_string, ifa->ifa_name, IFNAMSIZ);                
               }
             }
           }
@@ -399,16 +535,7 @@ int main(int argc, char *argv[])
     if ((bridge_ifindex = if_nametoindex(bridge_string)) == 0) 
       debugprintf(LEVEL_EXIT, "Get bridge interface index error (%s): %s", bridge_string, strerror(errno));
     inaddr.s_addr = bridge_addr;
-    strncpy(bridge_ipstring, inet_ntoa(inaddr), SMALLSTRINGSIZE);                
-
-    if (d = opendir(varrunhostapd)) {
-      while (((dir = readdir(d)) != NULL) && ( numthreads < (ARRAYSIZE-1))) 
-        if (dir->d_type == DT_SOCK) {
-          numthreads++;
-          strncpy(threadnames[numthreads], dir->d_name, SMALLSTRINGSIZE);
-        }
-      closedir(d);
-    }   
+    strncpy(bridge_ipstring, inet_ntoa(inaddr), IFNAMSIZ);                
 
     memset(&act, 0, sizeof(act));
     act.sa_handler = intHandler;
@@ -418,16 +545,33 @@ int main(int argc, char *argv[])
     if (rtnl_open(&rth, 0) < 0) debugprintf(LEVEL_EXIT, "Unable to open libnetlink.");;
     if (debuglevel < 2) nullStderr(); // Do not show libnetlink errors
 
-    for(i=0; i<=numthreads; i++) {
-        if ((err = pthread_create(&(tid[i]), NULL, &bridgefdb_threads, NULL)) != 0) {
-            tid[i] = (pthread_t)NULL;
-            debugprintf(LEVEL_EXIT, "Can't create thread: %s", strerror(err));
+    if (pthread_mutex_init(&threadlist_mutex, NULL) != 0) debugprintf(LEVEL_EXIT, "mutex init failed\n");
+    pthread_mutex_lock(&threadlist_mutex);
+    thread = (pthread_t)NULL;
+    if ((err = pthread_create(&thread, NULL, &bridgefdb_threads, NULL)) != 0)
+      debugprintf(LEVEL_EXIT, "Can't create thread: %s", strerror(err));
+    pthread_setname_np(thread, bridge_string);
+    node_push_first(&threadlist, bridge_ifindex, thread, bridge_string);
+    if (d = opendir(varrunhostapd)) {
+      while (((dir = readdir(d)) != NULL) && ( numthreads < (ARRAYSIZE-1))) 
+        if (dir->d_type == DT_SOCK) {
+          numthreads++;
+          thread = (pthread_t)NULL;
+          if ((err = pthread_create(&thread, NULL, &bridgefdb_threads, NULL)) != 0)
+              debugprintf(LEVEL_EXIT, "Can't create thread: %s", strerror(err));
+          pthread_setname_np(thread, dir->d_name);
+          node_push_last(threadlist, if_nametoindex(dir->d_name), thread, dir->d_name);
         }
-    }
+      closedir(d);
+    }   
+    pthread_mutex_unlock(&threadlist_mutex);
 
     while (threads_should_exit == false) pause();
 
-    for(i=0; i<=numthreads;i++) if (tid[i]!=(pthread_t)NULL) pthread_join(tid[i], NULL);
+    while (threadlist != NULL) nanosleep((const struct timespec[]){{0, 50000000L}}, NULL); // 0.05 seconds    
+    pthread_mutex_lock(&threadlist_mutex);
+    pthread_mutex_unlock(&threadlist_mutex);
+    pthread_mutex_destroy(&threadlist_mutex);
 
     revertStderr();
     if (rth.fd != -1) rtnl_close(&rth);
