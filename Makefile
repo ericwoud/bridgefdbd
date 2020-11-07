@@ -26,6 +26,7 @@ install:
 	($(CP) ./bridgefdbd.sh      /usr/local/sbin/ ; exit 0)
 	($(CP) ./bridgefdbd.service /etc/systemd/system/ ; exit 0)
 	($(CP) ./bridgefdbd_default /etc/default/bridgefdbd ; exit 0)
+	systemctl daemon-reload
 	systemctl enable  bridgefdbd
 	systemctl start   bridgefdbd
 	systemctl status  bridgefdbd --no-pager

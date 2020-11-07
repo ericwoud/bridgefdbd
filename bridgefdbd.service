@@ -10,4 +10,4 @@ Type=simple
 ExecStart=/usr/local/sbin/bridgefdbd $BRIDGEFDBD_OPTS $BRIDGEFDBD_ADDRS
 
 [Install]
-WantedBy=multi-user.target hostapd.service
+WantedBy=hostapd.service
