@@ -2,6 +2,10 @@
 
 A daemon to use when directly bridging your wifi interface to your network, without NAT or masquerade.
 
+Major update 24-11-2020:
+* Using libmnl instead of libnetlink
+* Using epoll and inotify instead of threads
+
 Ever tried to make an Acces Point (AP) by directly adding your wifi interface to the bridge on your AP? Why doesn't his work as expected? Why do you need to IPforward or use a NAT or somethin similar? When you add the wifi interface to the AP bridge the following happens:
 
 Your wifi client was first connected to your wireless router. Let's say you use your phone to test it. Look at the Forwarding DataBase (FDB) on both your router and AP by typing 'bridge fdb show' on a command prompt when possible. Locate your phones MAC address and see how network packets get send through the bridges on your network.
@@ -26,6 +30,11 @@ You need to be able to install the bridgefdbd program on your AP AND also on you
 
 ### Installing
 
+Install necessary libraries. Libsystemd is only used for sending 2 messages to systemd, so the service can be of Type=notify.
+
+```
+sudo apt install libmnl-dev libsystemd-dev
+```
 
 Clone from Git
 
@@ -37,12 +46,6 @@ Change directory
 
 ```
 cd bridgefdbd
-```
-
-Get the libnetlink library.
-
-```
-make getlib
 ```
 
 Now build the executable.
@@ -57,19 +60,25 @@ On Debian/Ubuntu you can use the following to copy the files to the needed locat
 sudo make install
 ```
 
-Edit the /etc/default/bridgefdbd file. At least make sure that the IP addresses of the bridges on your router and on your AP are in the BRIDGEFDBD_ADDRS line. Restart the service if nessecairy.
+Edit the /etc/default/bridgefdbd file. At least make sure that the IP addresses of the bridges on your router and on your AP are in the BRIDGEFDBD_ADDRS line. Restart the service if necessary.
 
 
 Other make options:
 
-Do a make getlib, make and make install (using sudo):
-```
-make all
-```
 
 Remove the installation:
 ```
 sudo make remove
+```
+
+Install the script:
+```
+sudo make installscript
+```
+
+Remove the script:
+```
+sudo make removescript
 ```
 
 Clean:
@@ -77,17 +86,13 @@ Clean:
 make clean
 ```
 
-Clean and remove the library:
-```
-make veryclean
-```
 
 ## Features
 
 The command line options are:
 
 * -d number      : debug information 0 = none, 1 = some (default), 2 = all.
-* -p number      : port number to use for internal network communication (UDP) (default = 11111).
+* -p number      : port number to use for internal network communication (UDP).
 * -s script      : location of optional bash script that listens if some client connected on any bridge on your network (default = ./bridgefdbd.sh). If not used at all it can be removed.
 * -h path        ; hostapd ctrl_interface to use (default = /var/run/hostapd).
 
@@ -98,5 +103,5 @@ On the commandline you can use CTRL-Z to make a clean exit, CTRL-C for a quick a
 
 ## Acknowledgments
 
-* [Iproute2](https://github.com/shemminger/iproute2)
+* [libmnl](https://www.netfilter.org/projects/libmnl/index.html)
 
