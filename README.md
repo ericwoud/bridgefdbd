@@ -1,4 +1,4 @@
-# Managed WIFI - Bridge FDB Daemon
+# Access Point Managed WIFI - Bridge FDB Daemon
 
 A daemon to use when directly bridging your wifi interface to your network, without NAT or masquerade.
 
