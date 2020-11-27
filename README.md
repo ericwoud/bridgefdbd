@@ -6,7 +6,7 @@ Major update 24-11-2020:
 * Using libmnl instead of libnetlink
 * Using epoll and inotify instead of threads
 
-Ever tried to make an Acces Point (AP) by directly adding your wifi interface to the bridge on your AP? Why doesn't his work as expected? Why do you need to IPforward or use a NAT or somethin similar? When you add the wifi interface to the AP bridge the following happens:
+Ever tried to make an Access Point (AP) by directly adding your wifi interface to the bridge on your AP? Why doesn't this work as expected? Why do you need to IPforward or use a NAT or something similar? When you add the wifi interface to the AP bridge the following happens:
 
 Your wifi client was first connected to your wireless router. Let's say you use your phone to test it. Look at the Forwarding DataBase (FDB) on both your router and AP by typing 'bridge fdb show' on a command prompt when possible. Locate your phones MAC address and see how network packets get send through the bridges on your network.
 
