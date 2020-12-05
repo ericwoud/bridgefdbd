@@ -579,7 +579,8 @@ int main(int argc, char *argv[])
       if (epoll_ctl(epfd, EPOLL_CTL_ADD, nlfd, &ev) < 0) 
         debugprintf(LEVEL_EXIT,"Could not add netlink to epoll: %s\n", strerror(errno));
     }
-    if ((infd = inotify_init()) < 0) debugprintf(LEVEL_EXIT, "inotify_init() error %s\n", strerror(errno));
+    if ((infd = inotify_init1(IN_NONBLOCK)) < 0) 
+      debugprintf(LEVEL_EXIT, "inotify_init() error %s\n", strerror(errno));
     {struct epoll_event ev = {
         .events = EPOLLIN|EPOLLET,
         .data.fd = infd,
@@ -609,13 +610,13 @@ int main(int argc, char *argv[])
 
     while (should_exit == false)
     {
-      switch (epoll_wait(epfd, &rtev, 1, 1000)) {
-        case -1: // select failed
-        case 0: // select timeout
+      switch (epoll_wait(epfd, &rtev, 1, -1)) { // the only place in the code we wait
+        case -1: // epoll_wait failed
+        case 0:  // epoll_wait timeout
           continue;
         default:
           if (rtev.data.fd==infd) { // Recieved inotify event
-            length = read (infd, buffer, sizeof(buffer));
+            length = read (infd, buffer, sizeof(buffer)); // infd is IN_NONBLOCK
             if (length <= 0) continue;
             i = 0;
             while (i <length) {
@@ -635,7 +636,7 @@ int main(int argc, char *argv[])
           }
           else if (rtev.data.fd==nlfd) { // Recieved netlink event
             struct msghdr msg = { &sanl, sizeof(sanl), &iov, 1, NULL, 0, 0 };
-            int len = recvmsg(nlfd, &msg, 0);
+            int len = recvmsg(nlfd, &msg, MSG_DONTWAIT);
             for (struct nlmsghdr *nh = (struct nlmsghdr *) buffer; NLMSG_OK (nh, len); nh = NLMSG_NEXT (nh, len)) {
               if (nh->nlmsg_type == NLMSG_DONE) break;
               if (nh->nlmsg_type == NLMSG_ERROR) continue;
