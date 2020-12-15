@@ -2,7 +2,7 @@ CC      = gcc
 RM      = rm -f
 CP      = cp -f
 CFLAGS := -g0 -Wall
-LDFLAGS := -lmnl -lsystemd
+LDFLAGS := -lsystemd
 LIBRELEASE = v4.8.0
 
 default: bridgefdbd

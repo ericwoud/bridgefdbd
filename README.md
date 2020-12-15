@@ -1,12 +1,17 @@
-# Access Point Managed WIFI - Bridge FDB Daemon
+# Managed Roaming WIFI - Bridge FDB Daemon
 
 A daemon to use when directly bridging your wifi interface to your network, without NAT or masquerade.
+The daemon makes it possible to do smooth roaming.
+ 
+Major update 15-12-2020:
+* No more libraries to communicate with netlink
+* Listening IP does not have to be linked to the bridge
 
 Major update 24-11-2020:
 * Using libmnl instead of libnetlink
 * Using epoll and inotify instead of threads
 
-Ever tried to make an Access Point (AP) by directly adding your wifi interface to the bridge on your AP? Why doesn't this work as expected? Why do you need to IPforward or use a NAT or something similar? When you add the wifi interface to the AP bridge the following happens:
+Ever tried to make an Acces Point (AP) by directly adding your wifi interface to the bridge on your AP? Why doesn't his work as expected? Why do you need to IPforward or use a NAT or somethin similar? When you add the wifi interface to the AP bridge the following happens:
 
 Your wifi client was first connected to your wireless router. Let's say you use your phone to test it. Look at the Forwarding DataBase (FDB) on both your router and AP by typing 'bridge fdb show' on a command prompt when possible. Locate your phones MAC address and see how network packets get send through the bridges on your network.
 
@@ -27,6 +32,12 @@ You need to build the program from source.
 ### Prerequisites
 
 You need to be able to install the bridgefdbd program on your AP AND also on your wireless router. Connect the router and AP directly without using a network switch. Hostapd needs to be in control of your wifi interfaces on your router and AP. On the AP the wifi interface needs to be added to the lan bridge.
+
+In the hostapd configuration there has to be the following statement, also after every bss= line:
+```
+ctrl_interface=/var/run/hostapd
+```
+
 
 ### Installing
 
