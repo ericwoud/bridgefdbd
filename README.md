@@ -41,10 +41,10 @@ ctrl_interface=/var/run/hostapd
 
 ### Installing
 
-Install necessary libraries. Libsystemd is only used for sending 2 messages to systemd, so the service can be of Type=notify.
+Install necessary library. Libsystemd is only used for sending 2 messages to systemd, so the service can be of Type=notify. Remove '#define USE_SYSTEMD 1' from source if you do not want to use it.
 
 ```
-sudo apt install libmnl-dev libsystemd-dev
+sudo apt install libsystemd-dev
 ```
 
 Clone from Git

@@ -413,7 +413,7 @@ void process_socket(addr_node_t *a)
         int sockfd;
         if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) !=-1) {
           for (int i = 0 ; i<ip_strings_cnt; i++) {
-            if (node_from_addr(threadlist, a->addr) != NULL) continue;
+            if (node_from_addr(threadlist, ip_addrs[i]) != NULL) continue;
             struct sockaddr_in si_bridges = {
               .sin_family = AF_INET,
               .sin_port = htons(port),
