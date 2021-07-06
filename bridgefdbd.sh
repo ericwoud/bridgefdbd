@@ -2,16 +2,16 @@
 
 trap 'echo -n' SIGTSTP SIGTERM
 
-while read DEVICE FROM INFO MAC JUNK
+while read IP DEVICE EVENT
 do
-  case $INFO in
-     'AP-STA-DISCONNECTED')      
-          echo BRIDGEFDBDO $DEVICE $FROM $INFO $MAC
+  case $EVENT in
+     AP-STA-DISCONNECTED*)      
+          echo BRIDGEFDBDO I=$IP D=$DEVICE E=$EVENT
           ;;
-     'AP-STA-CONNECTED')      
-          echo BRIDGEFDBDO $DEVICE $FROM $INFO $MAC
+     AP-STA-CONNECTED*)      
+          echo BRIDGEFDBDO I=$IP D=$DEVICE E=$EVENT
           ;;
-     'EXIT')
+     EXIT)
           echo BRIDGEFDBDO EXIT 
           exit 0
           ;;

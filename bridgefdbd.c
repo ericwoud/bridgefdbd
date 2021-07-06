@@ -42,7 +42,7 @@
 #endif
 
 #define EVENT_BUF_LEN  32678
-#define STRINGSIZE       256
+#define STRINGSIZE      1024
 
 #define NDA_RTA(r) \
 	((struct rtattr *)(((char *)(r)) + NLMSG_ALIGN(sizeof(struct ndmsg))))
@@ -85,6 +85,7 @@ typedef struct addr_node {
     int                   ifindex;
     in_addr_t             addr;
     int                   sockfd;
+    int                   synchrfd;
     char                  name[NAMELEN];
     char                  mac[ETH_ALEN];
 } addr_node_t;
@@ -163,9 +164,31 @@ addr_node_t * node_add(int type, addr_node_t ** head, char *name, in_addr_t addr
           sa_dest.sun_family = AF_UNIX;
           snprintf(sa_dest.sun_path, sizeof(sa_dest.sun_path),  "%s/%s", varrunhostapd, a->name);
           if (connect(a->sockfd, (struct sockaddr *) &sa_dest, sizeof(sa_dest)) != -1) { 
+            int flags = fcntl(a->sockfd, F_GETFL);
+            if (flags >= 0) fcntl(a->sockfd, F_SETFL, flags | O_NONBLOCK);
             send(a->sockfd, "DETACH", 6, 0); // // Just in case we did not send DETACH when exiting
             send(a->sockfd, "ATTACH", 6, 0);
             debugprintf(1, "Started listening on %s\n", a->name);
+          }
+        }
+      }
+      if ((a->synchrfd = socket(PF_UNIX, SOCK_DGRAM, 0)) !=-1) {
+        struct sockaddr_un sa_local = {0}, sa_dest = {0};
+        sa_local.sun_family = AF_UNIX;
+        snprintf(sa_local.sun_path, sizeof(sa_local.sun_path),  localsocketstr, a->synchrfd);
+        unlink(sa_local.sun_path); // Just in case we did not unlink it when exiting
+        if (bind(a->synchrfd, (struct sockaddr *) &sa_local, sizeof(sa_local)) !=-1) {
+          sa_dest.sun_family = AF_UNIX;
+          snprintf(sa_dest.sun_path, sizeof(sa_dest.sun_path),  "%s/%s", varrunhostapd, a->name);
+          if (connect(a->synchrfd, (struct sockaddr *) &sa_dest, sizeof(sa_dest)) != -1) { 
+            send(a->synchrfd, "STATUS", 6, 0);
+            int recsize;
+            if ((recsize=recv(a->synchrfd, buffer, sizeof(buffer), 0)) > 0) {  // flags ???
+              if (recsize >= sizeof(buffer)) recsize = sizeof(buffer) -1; 
+              buffer[recsize] = '\0';
+              debugprintf(2, "STATUS RETURNS:%s:ENDOF STATUS", buffer);
+            }
+                        
           }
         }
       }
@@ -239,6 +262,11 @@ int node_remove(addr_node_t ** head, addr_node_t *a) {
   switch (a->type) {
     case NODE_HOSTAPD:
       // Stop listening on hostapd
+      if (a->synchrfd != -1) {
+       char localfile[32];
+       snprintf(localfile, sizeof(localfile),  localsocketstr, a->synchrfd);
+       unlink(localfile); // Not done if CTRL-C is pressed
+      }
       if (a->sockfd != -1) {
        char localfile[32];
        snprintf(localfile, sizeof(localfile),  localsocketstr, a->sockfd);
@@ -277,12 +305,13 @@ int node_remove(addr_node_t ** head, addr_node_t *a) {
   return retval;
 }
 
-void send2script(char *interface, char *from, char *buff) {
+void send2script(char *ip, char *buff) {
   if (stdinprocess != NULL) {
     char s[STRINGSIZE];
-    snprintf(s, STRINGSIZE,  "%s %s %s\n", interface, from, buff);
+    snprintf(s, STRINGSIZE,  "%s %s\n", ip, buff);
     fwrite(s, sizeof(char), strlen(s), stdinprocess);
     fflush(stdinprocess);
+    debugprintf(2, "Recieved from %s: %s\n", ip, buff);
   }
 }
 
@@ -410,29 +439,33 @@ void process_socket(addr_node_t *a)
     else if (strstr(buffer, hostapdmatch) != NULL) {
       node_add(NODE_REQUEST_DUMP, &threadlist, buffer+skip, 0); // delete mac from fdb
       if (a->type==NODE_HOSTAPD) {
-        int sockfd;
+        int sockfd, linelen;
+        in_addr_t local_addr = 0;
+        char line[STRINGSIZE];
+        linelen = snprintf(line, sizeof(line), "%s %s", a->name, buffer+skip);
         if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) !=-1) {
           for (int i = 0 ; i<ip_strings_cnt; i++) {
-            if (node_from_addr(threadlist, ip_addrs[i]) != NULL) continue;
+            if (node_from_addr(threadlist, ip_addrs[i]) != NULL) {
+              local_addr = ip_addrs[i];
+              continue;
+            }  
             struct sockaddr_in si_bridges = {
               .sin_family = AF_INET,
               .sin_port = htons(port),
               .sin_addr.s_addr = ip_addrs[i],
             };
-            if (sendto(sockfd, buffer+skip, recsize-skip, 0, 
+            if (sendto(sockfd, line, linelen, 0, 
                      (struct sockaddr*)&si_bridges, sizeof(si_bridges)) != -1) { 
-              debugprintf(2, "Data send to %s:%d string %s\n", ip_strings[i], port, buffer+skip);
+              debugprintf(2, "Data send to %s:%d string %s\n", ip_strings[i], port, line);
             }
           }
           close(sockfd);
         }
-        debugprintf(2, "Recieved from %s: %s\n", a->name, buffer+skip);
         struct in_addr in_ad = {0};
-        in_ad.s_addr = a->addr;
-        send2script(a->name, inet_ntoa(in_ad), buffer+skip);
+        in_ad.s_addr = local_addr;   // This needs to be ip address of bridge the interface is attached to
+        send2script(inet_ntoa(in_ad), line);
       } else {
-        debugprintf(2, "Recieved from %s: %s\n", inet_ntoa(si_other.sin_addr), buffer+skip);
-        send2script(a->name, inet_ntoa(si_other.sin_addr), buffer+skip);
+        send2script(inet_ntoa(si_other.sin_addr), buffer+skip);
       }
     }  
   }
@@ -628,7 +661,7 @@ int main(int argc, char *argv[])
     sd_notify(0, "STOPPING=1");
   #endif
   if (stdinprocess != NULL) {
-    send2script("exit", "0.0.0.0", "EXIT\n");
+    send2script("0.0.0.0", "dummy EXIT\n");
     for(i=0; i<50; i++) {
       if (waitpid(pidsh, NULL, WNOHANG) > 0) break;
       usleep(100000);
